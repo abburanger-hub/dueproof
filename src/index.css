@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/*
+ * DueProof design foundation.
+ *
+ * The product is a calm, professional evidence workspace. These tokens define
+ * the neutral foundation and a single restrained accent used for primary
+ * actions and emphasis. Status colors are reserved for evidence states and are
+ * conveyed by text/labels as well as color, per the accessibility rules in
+ * PROJECT_CONTEXT.md.
+ *
+ * Tailwind CSS v4 is configured through CSS-first design tokens (the
+ * recommended integration with Vite via the @tailwindcss/vite plugin).
+ * Light mode is the default for document review; dark mode is supported via
+ * the class strategy once the app adds a theme toggle.
+ */
+
+@theme {
+  /* Brand accent — used sparingly for primary actions. */
+  --color-accent: oklch(51% 0.09 258);
+
+  /* Neutral ramp for the workspace chrome and document surfaces. */
+  --color-surface: oklch(99% 0.002 250);
+  --color-surface-muted: oklch(96.5% 0.003 250);
+  --color-surface-inset: oklch(94% 0.003 250);
+
+  /* Borders and dividers. */
+  --color-line: oklch(90% 0.004 250);
+  --color-line-strong: oklch(78% 0.006 250);
+
+  /* Typography. */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* Elevation for cards and dialogs (kept subtle; no loud shadows). */
+  --shadow-card: 0 1px 2px rgb(23 26 33 / 0.06), 0 1px 3px rgb(23 26 33 / 0.05);
+}
+
+/*
+ * Base layer: minimal global styles. Most styling lives in component
+ * utilities, so keep this layer intentionally small.
+ */
+@layer base {
+  html {
+    /* Support anchored scroll areas; the shell uses sticky regions. */
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface text-slate-900 antialiased;
+  }
+
+  /* Visible, consistent keyboard focus across every interactive element. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
