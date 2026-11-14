@@ -12,6 +12,10 @@ export interface CaseCardProps {
   onArchive: () => void
   onRestore: () => void
   onDeleteRequest: () => void
+  /** Opens the case workspace (documents panel). */
+  onOpen: () => void
+  /** True when this case's workspace is currently shown. */
+  isOpen: boolean
 }
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
@@ -28,6 +32,8 @@ export function CaseCard({
   onArchive,
   onRestore,
   onDeleteRequest,
+  onOpen,
+  isOpen,
 }: CaseCardProps) {
   const archived = paymentCase.status === 'archived'
 
@@ -35,12 +41,24 @@ export function CaseCard({
     <li
       className={cn(
         'rounded-lg border p-5 shadow-card',
-        archived ? 'border-dashed border-line-strong bg-surface-muted' : 'border-line bg-white',
+        archived
+          ? 'border-dashed border-line-strong bg-surface-muted'
+          : isOpen
+            ? 'border-accent/50 bg-white'
+            : 'border-line bg-white',
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-semibold text-slate-900">{paymentCase.title}</p>
+          <button
+            type="button"
+            onClick={onOpen}
+            disabled={pending}
+            className="text-left font-semibold text-slate-900 underline-offset-2 hover:underline disabled:opacity-60"
+            aria-current={isOpen ? 'true' : undefined}
+          >
+            {paymentCase.title}
+          </button>
           {paymentCase.description && (
             <p className="mt-1 text-sm leading-relaxed text-slate-600">
               {paymentCase.description}

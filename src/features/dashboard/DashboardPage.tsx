@@ -7,6 +7,7 @@ import { CaseCard } from '../cases/CaseCard'
 import { CaseFormDialog } from '../cases/CaseFormDialog'
 import { DeleteCaseDialog } from '../cases/DeleteCaseDialog'
 import { useCases } from '../cases/useCases'
+import { DocumentsPanel } from '../documents/DocumentsPanel'
 import { CasesEmptyState } from './CasesEmptyState'
 import { HowItWorks } from './HowItWorks'
 
@@ -15,6 +16,9 @@ type DialogState =
   | { kind: 'rename'; paymentCase: PaymentCase }
   | { kind: 'delete'; paymentCase: PaymentCase }
   | null
+
+/** A case selected for the workspace view (documents etc.). */
+type SelectedCase = { paymentCase: PaymentCase } | null
 
 /**
  * Dashboard: case management workspace.
@@ -41,9 +45,15 @@ export function DashboardPage() {
 
   const [dialog, setDialog] = useState<DialogState>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [selected, setSelected] = useState<SelectedCase>(null)
 
   const activeCases = cases.filter((c) => c.status === 'active')
   const archivedCases = cases.filter((c) => c.status === 'archived')
+
+  /** Keep the workspace pointed at the current version of its case. */
+  const selectedCase = selected
+    ? cases.find((c) => c.id === selected.paymentCase.id) ?? null
+    : null
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-10 sm:px-6">
@@ -141,6 +151,23 @@ export function DashboardPage() {
               </div>
             </div>
 
+            {selectedCase && (
+              <div className="mt-4 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3">
+                <p className="text-sm font-medium text-slate-800">
+                  Working in case: {selectedCase.title}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setSelected(null)}
+                  >
+                    Close case
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {activeCases.length === 0 ? (
               <CasesEmptyState />
             ) : (
@@ -154,11 +181,15 @@ export function DashboardPage() {
                     onArchive={() => void archive(paymentCase.id)}
                     onRestore={() => void restore(paymentCase.id)}
                     onDeleteRequest={() => setDialog({ kind: 'delete', paymentCase })}
+                    onOpen={() => setSelected({ paymentCase })}
+                    isOpen={selectedCase?.id === paymentCase.id}
                   />
                 ))}
               </ul>
             )}
           </section>
+
+          {selectedCase && <DocumentsPanel key={selectedCase.id} paymentCase={selectedCase} />}
 
           {archivedCases.length > 0 && (
             <section aria-labelledby="archived-cases-heading">
@@ -182,19 +213,21 @@ export function DashboardPage() {
               {showArchived && (
                 <ul className="mt-4 flex flex-col gap-3">
                   {archivedCases.map((paymentCase) => (
-                    <CaseCard
-                      key={paymentCase.id}
-                      paymentCase={paymentCase}
-                      pending={pending}
-                      onRename={() => setDialog({ kind: 'rename', paymentCase })}
-                      onArchive={() => void archive(paymentCase.id)}
-                      onRestore={() => void restore(paymentCase.id)}
-                      onDeleteRequest={() => setDialog({ kind: 'delete', paymentCase })}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
+                  <CaseCard
+                    key={paymentCase.id}
+                    paymentCase={paymentCase}
+                    pending={pending}
+                    onRename={() => setDialog({ kind: 'rename', paymentCase })}
+                    onArchive={() => void archive(paymentCase.id)}
+                    onRestore={() => void restore(paymentCase.id)}
+                    onDeleteRequest={() => setDialog({ kind: 'delete', paymentCase })}
+                    onOpen={() => setSelected({ paymentCase })}
+                    isOpen={selectedCase?.id === paymentCase.id}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
           )}
 
           {activeCases.length === 0 && archivedCases.length === 0 && <HowItWorks />}

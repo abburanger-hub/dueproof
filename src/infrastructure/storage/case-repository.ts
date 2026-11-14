@@ -83,21 +83,52 @@ export async function updateCase(
 }
 
 /**
- * Deletes a case permanently. Phase 2 deletes the case record; once
- * documents/facts exist, this must become a transactional cascade that also
- * removes every dependent record (a hard rule from the project context).
+ * Deletes a case permanently — a transactional cascade that removes the
+ * case record, every document, every extracted source block, and every
+ * stored original in one atomic transaction. Partial deletion must never
+ * leave orphaned evidence behind (a hard rule from the project context).
  */
 export async function deleteCase(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: CaseError }> {
   try {
-    await getDb().cases.delete(id)
+    const db = getDb()
+    await db.transaction('rw', db.cases, db.documents, db.sourceBlocks, db.originals, async () => {
+      const documentIds = (await db.documents
+        .where('caseId')
+        .equals(id)
+        .primaryKeys()) as string[]
+      await db.sourceBlocks.where('caseId').equals(id).delete()
+      await db.originals.bulkDelete(documentIds)
+      await db.documents.where('caseId').equals(id).delete()
+      await db.cases.delete(id)
+    })
     return { ok: true }
   } catch {
     // Driver-specific failures are converted to a safe storage error; raw
     // details never reach the UI or logs.
     return { ok: false, error: storageError() }
   }
+}
+
+/**
+ * Bumps a case's revision (evidence changed). Returns the updated case, or
+ * null when the case no longer exists.
+ */
+export async function bumpCaseRevision(
+  id: string,
+  now: number,
+): Promise<PaymentCase | null> {
+  const db = getDb()
+  const record = await db.cases.get(id)
+  if (!record) return null
+  const next: StoredCase = {
+    ...record,
+    revision: record.revision + 1,
+    updatedAt: now,
+  }
+  await db.cases.put(next)
+  return next
 }
 
 /* Re-export domain helpers used by UI use cases for convenience. */
