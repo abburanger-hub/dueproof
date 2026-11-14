@@ -9,6 +9,7 @@ import { DeleteCaseDialog } from '../cases/DeleteCaseDialog'
 import { useCases } from '../cases/useCases'
 import { DocumentsPanel } from '../documents/DocumentsPanel'
 import { EvidencePanelWithDocuments } from '../evidence/EvidencePanelWithDocuments'
+import { TimelineLedgerPanel } from '../timeline/TimelineLedgerPanel'
 import { CasesEmptyState } from './CasesEmptyState'
 import { HowItWorks } from './HowItWorks'
 
@@ -194,6 +195,7 @@ export function DashboardPage() {
             <div className="flex flex-col gap-6">
               <DocumentsPanel key={selectedCase.id} paymentCase={selectedCase} />
               <EvidencePanelWithDocuments paymentCase={selectedCase} />
+              <TimelineLedgerPanel key={selectedCase.id} paymentCase={selectedCase} />
             </div>
           )}
 
