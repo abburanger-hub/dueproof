@@ -6,8 +6,8 @@
  * The product is a calm, professional evidence workspace. These tokens define
  * the neutral foundation and a single restrained accent used for primary
  * actions and emphasis. Status colors are reserved for evidence states and are
- * conveyed by text/labels as well as color, per the accessibility rules in
- * PROJECT_CONTEXT.md.
+ * conveyed by text/labels as well as color, per the documented accessibility
+ * rules of this project.
  *
  * Tailwind CSS v4 is configured through CSS-first design tokens (the
  * recommended integration with Vite via the @tailwindcss/vite plugin).
