@@ -226,7 +226,9 @@ export async function deleteDocument(
       db.sourceBlocks,
       db.originals,
       db.cases,
+      db.facts,
       async () => {
+        await db.facts.where('documentId').equals(documentId).delete()
         await db.sourceBlocks.where('documentId').equals(documentId).delete()
         await db.originals.delete(documentId)
         await db.documents.delete(documentId)

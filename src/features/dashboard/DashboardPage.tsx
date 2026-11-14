@@ -8,6 +8,7 @@ import { CaseFormDialog } from '../cases/CaseFormDialog'
 import { DeleteCaseDialog } from '../cases/DeleteCaseDialog'
 import { useCases } from '../cases/useCases'
 import { DocumentsPanel } from '../documents/DocumentsPanel'
+import { EvidencePanelWithDocuments } from '../evidence/EvidencePanelWithDocuments'
 import { CasesEmptyState } from './CasesEmptyState'
 import { HowItWorks } from './HowItWorks'
 
@@ -189,7 +190,12 @@ export function DashboardPage() {
             )}
           </section>
 
-          {selectedCase && <DocumentsPanel key={selectedCase.id} paymentCase={selectedCase} />}
+          {selectedCase && (
+            <div className="flex flex-col gap-6">
+              <DocumentsPanel key={selectedCase.id} paymentCase={selectedCase} />
+              <EvidencePanelWithDocuments paymentCase={selectedCase} />
+            </div>
+          )}
 
           {archivedCases.length > 0 && (
             <section aria-labelledby="archived-cases-heading">
@@ -237,6 +243,7 @@ export function DashboardPage() {
       {dialog?.kind === 'create' && (
         <CaseFormDialog mode="create" submit={create} onClose={() => setDialog(null)} />
       )}
+
       {dialog?.kind === 'rename' && (
         <CaseFormDialog
           mode="rename"

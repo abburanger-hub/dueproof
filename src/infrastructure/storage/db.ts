@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie'
 import type { PaymentCase } from '../../domain/cases/case'
 import type { CaseDocument, SourceBlock } from '../../domain/documents/document'
+import type { EvidenceFact } from '../../domain/evidence'
 
 /**
  * Local case + document storage.
@@ -14,6 +15,7 @@ import type { CaseDocument, SourceBlock } from '../../domain/documents/document'
 export interface StoredCase extends PaymentCase {}
 export interface StoredDocument extends CaseDocument {}
 export interface StoredSourceBlock extends SourceBlock {}
+export interface StoredEvidenceFact extends EvidenceFact {}
 
 /** The original file bytes for one document, keyed by document id. */
 export interface StoredOriginal {
@@ -35,6 +37,7 @@ export class DueProofDatabase extends Dexie {
   documents!: Table<StoredDocument, string>
   sourceBlocks!: Table<StoredSourceBlock, string>
   originals!: Table<StoredOriginal, string>
+  facts!: Table<StoredEvidenceFact, string>
 
   constructor(name = 'dueproof') {
     super(name)
@@ -46,6 +49,15 @@ export class DueProofDatabase extends Dexie {
       documents: 'id, caseId, updatedAt',
       sourceBlocks: 'id, documentId, caseId, order',
       originals: 'documentId',
+    })
+    // Version 3 adds evidence facts. Versions 1–2 are NEVER edited so existing
+    // user databases migrate forward safely.
+    this.version(3).stores({
+      cases: 'id, status, updatedAt',
+      documents: 'id, caseId, updatedAt',
+      sourceBlocks: 'id, documentId, caseId, order',
+      originals: 'documentId',
+      facts: 'id, caseId, documentId, blockId, status, updatedAt',
     })
   }
 }

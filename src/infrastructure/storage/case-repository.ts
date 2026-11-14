@@ -93,7 +93,7 @@ export async function deleteCase(
 ): Promise<{ ok: true } | { ok: false; error: CaseError }> {
   try {
     const db = getDb()
-    await db.transaction('rw', db.cases, db.documents, db.sourceBlocks, db.originals, async () => {
+    await db.transaction('rw', db.cases, db.documents, db.sourceBlocks, db.originals, db.facts, async () => {
       const documentIds = (await db.documents
         .where('caseId')
         .equals(id)
@@ -101,6 +101,7 @@ export async function deleteCase(
       await db.sourceBlocks.where('caseId').equals(id).delete()
       await db.originals.bulkDelete(documentIds)
       await db.documents.where('caseId').equals(id).delete()
+      await db.facts.where('caseId').equals(id).delete()
       await db.cases.delete(id)
     })
     return { ok: true }
