@@ -1,10 +1,15 @@
 import { AppShell } from './app/layout/AppShell'
 import { Logo, LocalOnlyBadge } from './app/layout/Logo'
 import { DashboardPage } from './features/dashboard/DashboardPage'
+import { AiSpikePanel } from './features/dev/AiSpikePanel'
 
 /**
  * Phase 1 application entry: shell + dashboard placeholder.
  * Routing, persistence, and AI integration are added in later phases.
+ *
+ * The on-device inference spike panel is rendered ONLY in development:
+ * `import.meta.env.DEV` is statically replaced by Vite, so the panel is
+ * excluded from production bundles entirely. It processes no user evidence.
  */
 export default function App() {
   return (
@@ -28,6 +33,12 @@ export default function App() {
       }
     >
       <DashboardPage />
+
+      {import.meta.env.DEV && (
+        <div className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
+          <AiSpikePanel />
+        </div>
+      )}
     </AppShell>
   )
 }
