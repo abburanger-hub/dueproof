@@ -10,6 +10,8 @@ import { useCases } from '../cases/useCases'
 import { DocumentsPanel } from '../documents/DocumentsPanel'
 import { EvidencePanelWithDocuments } from '../evidence/EvidencePanelWithDocuments'
 import { TimelineLedgerPanel } from '../timeline/TimelineLedgerPanel'
+import { ReconciliationPanel } from '../reconciliation/ReconciliationPanel'
+import { CloudGeminiReconciler } from '../../infrastructure/ai/cloud/reconciler'
 import { CasesEmptyState } from './CasesEmptyState'
 import { HowItWorks } from './HowItWorks'
 
@@ -18,6 +20,9 @@ type DialogState =
   | { kind: 'rename'; paymentCase: PaymentCase }
   | { kind: 'delete'; paymentCase: PaymentCase }
   | null
+
+/** Single shared cloud reconciler instance for the workspace. */
+const cloudReconciler = new CloudGeminiReconciler()
 
 /** A case selected for the workspace view (documents etc.). */
 type SelectedCase = { paymentCase: PaymentCase } | null
@@ -196,6 +201,7 @@ export function DashboardPage() {
               <DocumentsPanel key={selectedCase.id} paymentCase={selectedCase} />
               <EvidencePanelWithDocuments paymentCase={selectedCase} />
               <TimelineLedgerPanel key={selectedCase.id} paymentCase={selectedCase} />
+              <ReconciliationPanel key={selectedCase.id} paymentCase={selectedCase} reconciler={cloudReconciler} />
             </div>
           )}
 

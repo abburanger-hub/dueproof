@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import type { PaymentCase } from '../../domain/cases/case'
 import type { CaseDocument, SourceBlock } from '../../domain/documents/document'
 import type { EvidenceFact } from '../../domain/evidence'
+import type { Finding } from '../../domain/reconciliation/finding'
 
 /**
  * Local case + document storage.
@@ -25,6 +26,29 @@ export interface StoredOriginal {
 }
 
 /**
+ * An approved disclosure snapshot — the consent record. Stores the exact
+ * canonical payload and its digest, the included fact ids with their
+ * `updatedAt` versions, and the case revision at approval time. The
+ * reconciliation service revalidates all of it byte-for-byte before any
+ * cloud send; any drift blocks the send with `stale_consent`.
+ */
+export interface StoredDisclosure {
+  id: string
+  caseId: string
+  caseRevision: number
+  canonicalPayload: string
+  digest: string
+  includedFactIds: string[]
+  factVersions: Record<string, number>
+  promptVersion: string
+  approvedAt: number
+  consumedAt: number | null
+}
+
+/** A reconciliation finding produced from one approved disclosure. */
+export interface StoredFinding extends Finding {}
+
+/**
  * DueProof's IndexedDB database.
  *
  * Schema versioning rule: NEVER edit an existing version block. Add a new
@@ -38,6 +62,8 @@ export class DueProofDatabase extends Dexie {
   sourceBlocks!: Table<StoredSourceBlock, string>
   originals!: Table<StoredOriginal, string>
   facts!: Table<StoredEvidenceFact, string>
+  disclosures!: Table<StoredDisclosure, string>
+  findings!: Table<StoredFinding, string>
 
   constructor(name = 'dueproof') {
     super(name)
@@ -58,6 +84,17 @@ export class DueProofDatabase extends Dexie {
       sourceBlocks: 'id, documentId, caseId, order',
       originals: 'documentId',
       facts: 'id, caseId, documentId, blockId, status, updatedAt',
+    })
+    // Version 4 adds approved disclosure snapshots and reconciliation
+    // findings. Versions 1–3 are never edited; databases migrate forward.
+    this.version(4).stores({
+      cases: 'id, status, updatedAt',
+      documents: 'id, caseId, updatedAt',
+      sourceBlocks: 'id, documentId, caseId, order',
+      originals: 'documentId',
+      facts: 'id, caseId, documentId, blockId, status, updatedAt',
+      disclosures: 'id, caseId, approvedAt',
+      findings: 'id, caseId, snapshotId, status, caseRevision',
     })
   }
 }

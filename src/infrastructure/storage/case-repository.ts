@@ -93,17 +93,25 @@ export async function deleteCase(
 ): Promise<{ ok: true } | { ok: false; error: CaseError }> {
   try {
     const db = getDb()
-    await db.transaction('rw', db.cases, db.documents, db.sourceBlocks, db.originals, db.facts, async () => {
-      const documentIds = (await db.documents
-        .where('caseId')
-        .equals(id)
-        .primaryKeys()) as string[]
-      await db.sourceBlocks.where('caseId').equals(id).delete()
-      await db.originals.bulkDelete(documentIds)
-      await db.documents.where('caseId').equals(id).delete()
-      await db.facts.where('caseId').equals(id).delete()
-      await db.cases.delete(id)
-    })
+    // Array form: Dexie's typed transaction signature accepts at most seven
+    // table arguments, and this cascade spans eight tables.
+    await db.transaction(
+      'rw',
+      [db.cases, db.documents, db.sourceBlocks, db.originals, db.facts, db.disclosures, db.findings],
+      async () => {
+        const documentIds = (await db.documents
+          .where('caseId')
+          .equals(id)
+          .primaryKeys()) as string[]
+        await db.sourceBlocks.where('caseId').equals(id).delete()
+        await db.originals.bulkDelete(documentIds)
+        await db.documents.where('caseId').equals(id).delete()
+        await db.facts.where('caseId').equals(id).delete()
+        await db.disclosures.where('caseId').equals(id).delete()
+        await db.findings.where('caseId').equals(id).delete()
+        await db.cases.delete(id)
+      },
+    )
     return { ok: true }
   } catch {
     // Driver-specific failures are converted to a safe storage error; raw

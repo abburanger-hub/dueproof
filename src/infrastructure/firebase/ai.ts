@@ -28,6 +28,15 @@ let cloudModel: GenerativeModel | undefined
 let aiService: AI | undefined
 
 /**
+ * The pinned cloud model used exclusively for reconciliation of approved
+ * disclosure payloads. `gemini-3.5-flash-lite` is a stable, no-billing-
+ * required general-use model in the current Firebase catalog (checked
+ * 2026-11-18) and the installed SDK's own default hybrid in-cloud model.
+ * Pinning prevents silent model drift from changing tested behavior.
+ */
+export const CLOUD_RECONCILIATION_MODEL = 'gemini-3.5-flash-lite'
+
+/**
  * Prepares the shared AI service and App Check, then returns the AI service.
  * The heavy Firebase AI module is imported dynamically so the local-first
  * workflow (which never touches AI) does not pay the bundle cost.
@@ -61,7 +70,10 @@ export async function getLocalOnlyModel(): Promise<GenerativeModel> {
 export async function getCloudOnlyModel(): Promise<GenerativeModel> {
   if (!cloudModel) {
     const ai = await getAIService()
-    cloudModel = getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD })
+    cloudModel = getGenerativeModel(ai, {
+      mode: InferenceMode.ONLY_IN_CLOUD,
+      inCloudParams: { model: CLOUD_RECONCILIATION_MODEL },
+    })
   }
   return cloudModel
 }
