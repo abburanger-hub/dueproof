@@ -11,12 +11,15 @@ import {
 import type { CaseDocument } from '../../domain/documents/document'
 import type { PaymentCase } from '../../domain/cases/case'
 import type { EvidenceFact, FactKind } from '../../domain/evidence'
-import { formatMinorUnits } from '../../domain/evidence'
+import { FACT_KINDS, formatMinorUnits, supportedMinorUnitDigits } from '../../domain/evidence'
+import { createManualFact } from '../../domain/evidence/fact'
+import { parseDateFromQuote } from '../../domain/evidence/parse'
+import { putFact } from '../../infrastructure/storage/fact-repository'
 import { Badge } from '../../shared/ui/badge'
 import { Button } from '../../shared/ui/button'
 import { Dialog } from '../../shared/ui/dialog'
 import { Field } from '../../shared/ui/field'
-import { TextArea, TextInput } from '../../shared/ui/input'
+import { Select, TextArea, TextInput } from '../../shared/ui/input'
 import { useEvidence, type ExtractionRunState, type FactWithSourceState } from './useEvidence'
 import type { LocalFactExtractor } from '../../application/ports/local-fact-extractor'
 import type { EvidenceError } from '../../domain/evidence'
@@ -199,6 +202,15 @@ export function EvidencePanel({ paymentCase, documents, extractor }: EvidencePan
         </p>
       )}
 
+      <div className="mt-6 rounded-md border border-line bg-surface-muted px-4 py-4">
+        <p className="text-sm font-semibold text-slate-800">Add a fact manually</p>
+        <p className="mt-1 text-xs text-slate-600">
+          Manual facts count as reviewed immediately — they are your own record of what
+          happened. Amounts are optional; dates are read from the date phrase.
+        </p>
+        <ManualFactForm caseId={paymentCase.id} currency={paymentCase.currency} onSaved={evidence.refresh} />
+      </div>
+
       {evidence.status === 'ready' && evidence.facts.length > 0 && (
         <ul className="mt-4 flex flex-col gap-3">
           {evidence.facts.map((entry) => {
@@ -327,6 +339,163 @@ export function EvidencePanel({ paymentCase, documents, extractor }: EvidencePan
         />
       )}
     </section>
+  )
+}
+
+function ManualFactForm({
+  caseId,
+  currency,
+  onSaved,
+}: {
+  caseId: string
+  currency: string
+  onSaved: () => Promise<void>
+}) {
+  const [kind, setKind] = useState<EvidenceFact['kind']>('commitment')
+  const [statement, setStatement] = useState('')
+  const [amountText, setAmountText] = useState('')
+  const [dateText, setDateText] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const KIND_LABELS: Record<string, string> = {
+    agreement: 'Agreement',
+    deliverable: 'Deliverable',
+    commitment: 'Commitment',
+    deadline: 'Deadline',
+    delivery: 'Delivery',
+    approval: 'Approval',
+    invoice: 'Invoice',
+    payment: 'Payment',
+    credit: 'Credit / discount',
+    dispute: 'Dispute',
+    scope_change: 'Scope change',
+    other: 'Other',
+  }
+
+  const submit = async () => {
+    setError(null)
+    const trimmed = statement.trim()
+    if (trimmed.length === 0) {
+      setError('Write a short statement first.')
+      return
+    }
+    let amount: EvidenceFact['amount'] = null
+    const trimmedAmount = amountText.trim()
+    if (trimmedAmount.length > 0) {
+      const numeric = Number(trimmedAmount)
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        setError('Amount must be a positive number, or leave it empty.')
+        return
+      }
+      const digits = supportedMinorUnitDigits(currency)
+      amount = {
+        minorUnits: Math.round(numeric * 10 ** digits),
+        currency,
+        ambiguous: false,
+        currencyMismatch: false,
+      }
+    }
+    let date: EvidenceFact['date'] = null
+    const trimmedDate = dateText.trim()
+    if (trimmedDate.length > 0) {
+      const parsed = parseDateFromQuote(trimmedDate)
+      if (!parsed || parsed.precision === 'unresolved') {
+        setError('Could not read that date. Try a form like “12 March 2026” or “2026-03-12”.')
+        return
+      }
+      date = parsed
+    }
+    setSaving(true)
+    try {
+      const created = createManualFact({
+        id: crypto.randomUUID(),
+        caseId,
+        kind,
+        statement: trimmed,
+        amount,
+        date,
+        createdAt: Date.now(),
+      })
+      if (!created.ok) {
+        setError(created.error.message)
+        return
+      }
+      const saved = await putFact(created.fact)
+      if (!saved.ok) {
+        setError(saved.error.message)
+        return
+      }
+      setStatement('')
+      setAmountText('')
+      setDateText('')
+      await onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 flex flex-col gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Fact type" htmlFor="manual-fact-kind">
+          {(control) => (
+            <Select
+              {...control}
+              value={kind}
+              onChange={(event) => setKind(event.target.value as EvidenceFact['kind'])}
+            >
+              {FACT_KINDS.map((option) => (
+                <option key={option} value={option}>
+                  {KIND_LABELS[option] ?? option}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Date phrase (optional)" htmlFor="manual-fact-date" hint="e.g. “12 March 2026”.">
+          {(control) => (
+            <TextInput
+              {...control}
+              value={dateText}
+              onChange={(event) => setDateText(event.target.value)}
+            />
+          )}
+        </Field>
+      </div>
+      <Field label="Statement" htmlFor="manual-fact-statement" hint="One short, neutral sentence.">
+        {(control) => (
+          <TextInput
+            {...control}
+            value={statement}
+            maxLength={200}
+            placeholder="Client confirmed the final milestone by email"
+            onChange={(event) => setStatement(event.target.value)}
+          />
+        )}
+      </Field>
+      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto]">
+        <Field label={`Amount in ${currency} (optional)`} htmlFor="manual-fact-amount">
+          {(control) => (
+            <TextInput
+              {...control}
+              inputMode="decimal"
+              placeholder="24000"
+              value={amountText}
+              onChange={(event) => setAmountText(event.target.value)}
+            />
+          )}
+        </Field>
+        <Button onClick={() => void submit()} disabled={saving}>
+          Add fact
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 
