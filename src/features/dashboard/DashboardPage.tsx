@@ -11,6 +11,8 @@ import { DocumentsPanel } from '../documents/DocumentsPanel'
 import { EvidencePanelWithDocuments } from '../evidence/EvidencePanelWithDocuments'
 import { TimelineLedgerPanel } from '../timeline/TimelineLedgerPanel'
 import { ReconciliationPanel } from '../reconciliation/ReconciliationPanel'
+import { PrivacyPanel } from '../privacy/PrivacyPanel'
+import { ReportPanel } from '../reports/ReportPanel'
 import { CloudGeminiReconciler } from '../../infrastructure/ai/cloud/reconciler'
 import { CasesEmptyState } from './CasesEmptyState'
 import { HowItWorks } from './HowItWorks'
@@ -202,6 +204,8 @@ export function DashboardPage() {
               <EvidencePanelWithDocuments paymentCase={selectedCase} />
               <TimelineLedgerPanel key={selectedCase.id} paymentCase={selectedCase} />
               <ReconciliationPanel key={selectedCase.id} paymentCase={selectedCase} reconciler={cloudReconciler} />
+              <ReportPanel key={selectedCase.id} paymentCase={selectedCase} />
+              <PrivacyPanel key={selectedCase.id} paymentCase={selectedCase} />
             </div>
           )}
 

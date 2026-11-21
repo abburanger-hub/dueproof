@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Cloud,
@@ -9,6 +9,9 @@ import {
 } from 'lucide-react'
 import type { PaymentCase } from '../../domain/cases/case'
 import type { EvidenceFact } from '../../domain/evidence'
+import { buildSelectionState, sanitizeSelection } from '../../domain/privacy/consent-selection'
+import { CONSENT_ISSUE_MESSAGES } from '../../application/privacy/consent-status-service'
+import { listCaseFacts } from '../../infrastructure/storage/fact-repository'
 import { Badge } from '../../shared/ui/badge'
 import { Button } from '../../shared/ui/button'
 import { useReconciliation } from './useReconciliation'
@@ -47,6 +50,9 @@ export function ReconciliationPanel({
   const { previewState } = reconciliation
 
   const reviewedCount = useMemo(() => previewState.preview?.payload.facts.length ?? 0, [previewState])
+
+  const [selectionOpen, setSelectionOpen] = useState(false)
+  const [selectedFactIds, setSelectedFactIds] = useState<ReadonlySet<string> | null>(null)
 
   return (
     <section
@@ -94,22 +100,43 @@ export function ReconciliationPanel({
             <Eye className="h-4 w-4 text-slate-500" aria-hidden="true" />
             Step 1 · Review exactly what would be sent
           </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void reconciliation.buildPreview()}
-            disabled={previewState.status === 'building'}
-          >
-            {previewState.status === 'building' ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                Building…
-              </>
-            ) : (
-              'Build preview'
-            )}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={selectionOpen}
+              onClick={() => setSelectionOpen((open) => !open)}
+            >
+              Choose facts
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void reconciliation.buildPreview()}
+              disabled={previewState.status === 'building'}
+            >
+              {previewState.status === 'building' ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  Building…
+                </>
+              ) : (
+                'Build preview'
+              )}
+            </Button>
+          </div>
         </div>
+
+        {selectionOpen && (
+          <FactSelectionPanel
+            caseId={paymentCase.id}
+            currentSelection={selectedFactIds}
+            onSelectionChange={(next) => {
+              setSelectedFactIds(next)
+              reconciliation.setIncludedFactIds(next)
+            }}
+          />
+        )}
 
         {previewState.status === 'error' && (
           <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -117,7 +144,26 @@ export function ReconciliationPanel({
           </p>
         )}
 
-        {previewState.status === 'ready' && previewState.preview && previewState.payload && (
+        {/* Stale-consent surfacing: explain exactly what changed and what to do. */}
+      {reconciliation.consentIssue && (
+        <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="flex items-start gap-2 text-sm font-medium text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            The approved disclosure is no longer valid.
+          </p>
+          <p className="mt-1 pl-6 text-sm text-amber-800">
+            {CONSENT_ISSUE_MESSAGES[reconciliation.consentIssue]}
+          </p>
+          {reconciliation.consentChangedFactIds.length > 0 && (
+            <p className="mt-1 pl-6 text-xs text-amber-700">
+              Changed fact ids: {reconciliation.consentChangedFactIds.join(', ')}.
+              Nothing was sent.
+            </p>
+          )}
+        </div>
+      )}
+
+      {previewState.status === 'ready' && previewState.preview && previewState.payload && (
           <div className="mt-4 flex flex-col gap-4">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-md bg-surface-muted px-3 py-2">
@@ -363,3 +409,132 @@ export function ReconciliationPanel({
 }
 
 export type { EvidenceFact }
+
+/* ------------------------------------------------------------------ */
+/* Per-fact selection (consent UI)                                     */
+/* ------------------------------------------------------------------ */
+
+const SENSITIVE_LABELS: Record<string, string> = {
+  email: 'email address',
+  phone: 'phone-like number',
+  url: 'web link',
+  pan_or_id: 'ID-like token',
+  handle: 'social handle',
+}
+
+/**
+ * Per-fact selection for the disclosure payload. Eligible facts only;
+ * sensitive facts start unselected with the reason shown; including one is
+ * an explicit, informed override the user makes per payload.
+ */
+function FactSelectionPanel({
+  caseId,
+  currentSelection,
+  onSelectionChange,
+}: {
+  caseId: string
+  currentSelection: ReadonlySet<string> | null
+  onSelectionChange: (ids: ReadonlySet<string>) => void
+}) {
+  const [facts, setFacts] = useState<Array<{
+    id: string
+    kind: string
+    statement: string
+    status: string
+    sensitiveCategories: string[]
+  }> | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useMemo(
+    () => async () => {
+      try {
+        const rows = await listCaseFacts(caseId)
+        const state = buildSelectionState(rows.map((row) => row.fact))
+        setFacts(
+          state.selectable.map((entry) => ({
+            id: entry.fact.id,
+            kind: entry.fact.kind,
+            statement: entry.fact.statement,
+            status: entry.fact.status,
+            sensitiveCategories: entry.sensitiveMatches.map((match) => match.category),
+          })),
+        )
+        if (currentSelection === null) {
+          onSelectionChange(state.defaultIncludedFactIds)
+        }
+      } catch {
+        setError('Loading facts for selection failed. Try again.')
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [caseId],
+  )
+
+  void useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseId])
+
+  if (error) {
+    return <p className="mt-3 text-sm text-amber-800">{error}</p>
+  }
+  if (facts === null) {
+    return <p className="mt-3 text-sm text-slate-500">Loading eligible facts…</p>
+  }
+  if (facts.length === 0) {
+    return (
+      <p className="mt-3 text-sm text-slate-600">
+        No reviewed facts are eligible yet. Review some facts first.
+      </p>
+    )
+  }
+
+  const selection = currentSelection ?? new Set<string>()
+  const eligibleIds = new Set(facts.map((fact) => fact.id))
+  const sanitized = sanitizeSelection(selection, eligibleIds)
+
+  return (
+    <div className="mt-3 rounded-md border border-line bg-surface-muted px-4 py-4">
+      <p className="text-sm font-semibold text-slate-800">
+        Choose exactly which reviewed facts may be sent
+      </p>
+      <p className="mt-1 text-xs text-slate-600">
+        Sensitive-detected facts start unselected. Including one is your explicit,
+        informed override for this payload only.
+      </p>
+      <ul className="mt-3 flex flex-col gap-2">
+        {facts.map((fact) => {
+          const checked = sanitized.has(fact.id)
+          const inputId = `fact-select-${fact.id}`
+          return (
+            <li key={fact.id} className="flex items-start gap-3 rounded-md border border-line bg-white px-3 py-2">
+              <input
+                id={inputId}
+                type="checkbox"
+                checked={checked}
+                onChange={() => {
+                  const next = new Set(sanitized)
+                  if (checked) next.delete(fact.id)
+                  else next.add(fact.id)
+                  onSelectionChange(next)
+                }}
+                className="mt-1 h-4 w-4"
+              />
+              <label htmlFor={inputId} className="min-w-0 flex-1 cursor-pointer">
+                <span className="flex flex-wrap items-center gap-2">
+                  <Badge tone="neutral">{fact.kind}</Badge>
+                  {fact.sensitiveCategories.length > 0 && (
+                    <Badge tone="caution">
+                      Possible: {fact.sensitiveCategories.map((c) => SENSITIVE_LABELS[c] ?? c).join(', ')}
+                    </Badge>
+                  )}
+                </span>
+                <span className="mt-1 block text-sm text-slate-800">{fact.statement}</span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}

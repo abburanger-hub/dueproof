@@ -26,6 +26,7 @@ import {
   isReconciliationRunning,
 } from '../../application/reconciliation/reconciliation-service'
 import { applyFindingReview, listFindings } from '../../infrastructure/storage/finding-repository'
+import { getConsentStatus, type ConsentIssue } from '../../application/privacy/consent-status-service'
 import type { StoredDisclosure } from '../../infrastructure/storage/db'
 
 export interface DisclosurePreviewState {
@@ -44,6 +45,9 @@ export interface ReconciliationState {
   running: boolean
   actionError: string | null
   lastRun: { saved: number; dropped: number } | null
+  /** Whether the stored snapshot's approval is still valid, and why not. */
+  consentIssue: ConsentIssue | null
+  consentChangedFactIds: string[]
   buildPreview: () => Promise<void>
   setIncludedFactIds: (ids: ReadonlySet<string>) => void
   approve: () => Promise<void>
@@ -75,6 +79,8 @@ export function useReconciliation(
   const [running, setRunning] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [lastRun, setLastRun] = useState<{ saved: number; dropped: number } | null>(null)
+  const [consentIssue, setConsentIssue] = useState<ConsentIssue | null>(null)
+  const [consentChangedFactIds, setConsentChangedFactIds] = useState<string[]>([])
 
   const refreshFindings = useCallback(async () => {
     try {
@@ -168,10 +174,19 @@ export function useReconciliation(
         // The snapshot may have been consumed despite a display error;
         // requiring a fresh approval keeps the contract strict.
         setSnapshot(null)
+        if (outcome.error?.code === 'stale_consent') {
+          const status = await getConsentStatus(snapshot.id)
+          if (status.ok) {
+            setConsentIssue(status.status.issue)
+            setConsentChangedFactIds(status.status.changedFactIds)
+          }
+        }
         return
       }
       setLastRun({ saved: outcome.savedFindings ?? 0, dropped: outcome.droppedFindings ?? 0 })
       setSnapshot(null)
+      setConsentIssue(null)
+      setConsentChangedFactIds([])
       await refreshFindings()
     } finally {
       setRunning(false)
@@ -209,6 +224,8 @@ export function useReconciliation(
     running,
     actionError,
     lastRun,
+    consentIssue,
+    consentChangedFactIds,
     buildPreview,
     setIncludedFactIds,
     approve,
